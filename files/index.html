@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tanuvin readings</title>
+<style>
+  :root {
+    --bg: #eef2ef; --card: #ffffff; --ink: #15211c; --muted: #5d6b64;
+    --line: #d5ddd8; --live: #0f766e; --stale: #a16207;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1613; --card: #172019; --ink: #e8f0ec; --muted: #93a39a;
+      --line: #27342d; --live: #4fd1c0; --stale: #e0b44c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 28px 18px 48px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 22px; font-size: .95rem; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  .id { font-weight: 600; word-break: break-all; }
+  .state { font-size: .85rem; margin: 2px 0 12px; }
+  .live { color: var(--live); } .stale { color: var(--stale); }
+  .temp { font-size: 2.6rem; font-weight: 700; line-height: 1.05; }
+  .row { display: flex; gap: 22px; margin-top: 8px; color: var(--muted); font-size: .95rem; }
+  .row b { color: var(--ink); font-weight: 600; }
+  .empty { padding: 22px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tanuvin readings</h1>
+  <p class="sub" id="status">Loading…</p>
+  <div class="grid" id="grid"></div>
+</main>
+<script>
+  const grid = document.getElementById("grid");
+  const statusEl = document.getElementById("status");
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function ago(s) {
+    if (s < 60) return s + " s ago";
+    if (s < 3600) return Math.floor(s / 60) + " min ago";
+    return Math.floor(s / 3600) + " h ago";
+  }
+
+  function render(rows) {
+    grid.replaceChildren();
+    if (!rows.length) {
+      grid.appendChild(el("div", "empty", "No readings yet. Power on the ESP32 and keep a beacon close to it."));
+      return;
+    }
+    for (const r of rows) {
+      const live = r.age_s < 150;
+      const card = el("div", "card");
+      card.appendChild(el("div", "id", r.device_id));
+      card.appendChild(el("div", "state " + (live ? "live" : "stale"),
+        (live ? "Live, " : "No signal, ") + "updated " + ago(r.age_s)));
+      card.appendChild(el("div", "temp", r.temp.toFixed(1) + " °C"));
+      const row = el("div", "row");
+      const h = el("span"); h.append("Humidity ", el("b", "", r.hum.toFixed(1) + " %"));
+      row.appendChild(h);
+      if (r.rssi !== null) {
+        const s = el("span"); s.append("Signal ", el("b", "", r.rssi + " dBm"));
+        row.appendChild(s);
+      }
+      card.appendChild(row);
+      grid.appendChild(card);
+    }
+  }
+
+  async function load() {
+    try {
+      const res = await fetch("/api/readings", { cache: "no-store" });
+      if (!res.ok) throw new Error(res.status);
+      render(await res.json());
+      statusEl.textContent = "Refreshes every 5 seconds.";
+    } catch (e) {
+      statusEl.textContent = "Can't reach the server. Retrying…";
+    }
+  }
+  load();
+  setInterval(load, 5000);
+</script>
+</body>
+</html>
