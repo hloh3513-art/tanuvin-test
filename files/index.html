@@ -30,6 +30,12 @@
   .row { display: flex; gap: 22px; margin-top: 8px; color: var(--muted); font-size: .95rem; }
   .row b { color: var(--ink); font-weight: 600; }
   .empty { padding: 22px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); }
+  h2 { font-size: 1.05rem; margin: 30px 0 10px; }
+  .tablewrap { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
 </style>
 </head>
 <body>
@@ -37,6 +43,13 @@
   <h1>Tanuvin readings</h1>
   <p class="sub" id="status">Loading…</p>
   <div class="grid" id="grid"></div>
+  <h2>Previous readings</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Time</th><th>Device</th><th>Temp</th><th>Humidity</th></tr></thead>
+      <tbody id="history"></tbody>
+    </table>
+  </div>
 </main>
 <script>
   const grid = document.getElementById("grid");
@@ -66,7 +79,7 @@
       const card = el("div", "card");
       card.appendChild(el("div", "id", r.device_id));
       card.appendChild(el("div", "state " + (live ? "live" : "stale"),
-        (live ? "Live, " : "No signal, ") + "updated " + ago(r.age_s)));
+        (live ? "Live, " : "No signal, ") + "updated " + new Date(r.ts * 1000).toLocaleTimeString() + " (" + ago(r.age_s) + ")"));
       card.appendChild(el("div", "temp", r.temp.toFixed(1) + " °C"));
       const row = el("div", "row");
       const h = el("span"); h.append("Humidity ", el("b", "", r.hum.toFixed(1) + " %"));
@@ -80,11 +93,35 @@
     }
   }
 
+  async function loadHistory() {
+    try {
+      const res = await fetch("/api/history?limit=100", { cache: "no-store" });
+      if (!res.ok) return;
+      const rows = await res.json();
+      const body = document.getElementById("history");
+      body.replaceChildren();
+      if (!rows.length) {
+        const tr = el("tr"); const td = el("td", "", "No readings yet.");
+        td.colSpan = 4; tr.appendChild(td); body.appendChild(tr);
+        return;
+      }
+      for (const r of rows) {
+        const tr = el("tr");
+        tr.appendChild(el("td", "", new Date(r.ts * 1000).toLocaleString()));
+        tr.appendChild(el("td", "", r.device_id));
+        tr.appendChild(el("td", "", r.temp.toFixed(1) + " °C"));
+        tr.appendChild(el("td", "", r.hum.toFixed(1) + " %"));
+        body.appendChild(tr);
+      }
+    } catch (e) { /* the cards above already show connection problems */ }
+  }
+
   async function load() {
     try {
       const res = await fetch("/api/readings", { cache: "no-store" });
       if (!res.ok) throw new Error(res.status);
       render(await res.json());
+      loadHistory();
       statusEl.textContent = "Refreshes every 5 seconds.";
     } catch (e) {
       statusEl.textContent = "Can't reach the server. Retrying…";
