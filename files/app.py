@@ -1,6 +1,7 @@
 import hmac
 import os
 import time
+from collections import deque
 
 from flask import Flask, jsonify, request, send_from_directory
 
@@ -8,6 +9,7 @@ app = Flask(__name__)
 
 API_KEY = os.environ.get("API_KEY", "")
 latest = {}  # device_id -> last reading (memory only, lost on restart)
+history = deque(maxlen=500)  # newest readings of all devices (memory only)
 
 
 @app.get("/")
@@ -44,13 +46,15 @@ def add_reading():
     if len(latest) >= 50 and device_id not in latest:
         return {"ok": False, "error": "too many devices"}, 400
 
-    latest[device_id] = {
+    reading = {
         "device_id": device_id,
         "temp": round(float(temp), 2),
         "hum": round(float(hum), 2),
         "rssi": rssi if isinstance(rssi, (int, float)) else None,
         "ts": time.time(),
     }
+    latest[device_id] = reading
+    history.append(reading)
     return {"ok": True}
 
 
@@ -62,3 +66,12 @@ def list_readings():
         rows.append({**r, "age_s": int(now - r["ts"])})
     rows.sort(key=lambda r: r["device_id"])
     return jsonify(rows)
+
+
+@app.get("/api/history")
+def list_history():
+    try:
+        limit = min(int(request.args.get("limit", 100)), 500)
+    except ValueError:
+        limit = 100
+    return jsonify(list(history)[::-1][:limit])  # newest first
