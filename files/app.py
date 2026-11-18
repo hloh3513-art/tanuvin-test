@@ -22,11 +22,12 @@ def health():
 
 @app.post("/api/readings")
 def add_reading():
-    if not API_KEY:
-        return {"ok": False, "error": "server has no API_KEY set"}, 500
-    sent = request.headers.get("X-API-Key", "")
-    if not hmac.compare_digest(sent.encode(), API_KEY.encode()):
-        return {"ok": False, "error": "bad key"}, 401
+    # Test mode: if API_KEY is not set in Render, readings are accepted without a key.
+    # Set API_KEY later to turn the key check on.
+    if API_KEY:
+        sent = request.headers.get("X-API-Key", "")
+        if not hmac.compare_digest(sent.encode(), API_KEY.encode()):
+            return {"ok": False, "error": "bad key"}, 401
 
     data = request.get_json(silent=True) or {}
     device_id = data.get("device_id")
